@@ -13,7 +13,7 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: env.CORS_ORIGIN,
+    origin: "*",
     credentials: true,
   })
 );
@@ -42,6 +42,7 @@ app.get("/", (req, res) => {
   res.send("API is running 🚀");
 });
 
+app.set("trust proxy", 1); // for rate limiting in northflank
 // ─── API Routes ──────────────────────────────────────────
 app.use('/api', routes);
 
