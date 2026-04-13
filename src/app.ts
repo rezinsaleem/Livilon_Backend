@@ -38,6 +38,10 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ success: true, message: 'Server is running' });
 });
 
+app.get("/", (req, res) => {
+  res.send("API is running 🚀");
+});
+
 // ─── API Routes ──────────────────────────────────────────
 app.use('/api', routes);
 
