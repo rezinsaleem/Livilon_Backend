@@ -39,7 +39,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.get("/", (req, res) => {
-  res.send("API is running 🚀");
+  res.send("Hello Afreen");
 });
 
 app.set("trust proxy", 1); // for rate limiting in northflank

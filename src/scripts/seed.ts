@@ -22,7 +22,7 @@ const seedAdmin = async () => {
 
     await User.create({
       userId: process.env.ADMIN_USER_ID || 'ADMIN001',
-      email: process.env.ADMIN_EMAIL || 'rezinsaleem2u@gmail.com',
+      email: process.env.ADMIN_EMAIL || 'binthassan356@gmail.com',
       mobile: process.env.ADMIN_MOBILE || '9999999999',
       password: hashedPwd,
     });
