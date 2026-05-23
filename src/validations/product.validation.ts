@@ -4,6 +4,8 @@ const materialListItemSchema = z.object({
   materialId: z.string().min(1, 'Material ID is required'),
   name: z.string().min(1, 'Material name is required'),
   price: z.number().min(0, 'Price must be non-negative'),
+  quantity: z.number().min(1, 'Quantity must be at least 1'),
+  totalPrice: z.number().min(0, 'Total price must be non-negative'),
 });
 
 const productCategorySchema = z.object({

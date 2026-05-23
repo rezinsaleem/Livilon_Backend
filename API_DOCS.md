@@ -217,7 +217,13 @@ Resets password. OTP must be verified first.
   "images": ["products/sofa-1.jpg", "products/sofa-2.jpg"],
   "mrp": 45000,
   "materialList": [
-    { "materialId": "66f1a2b3c4d5e6f7a8b9c0d1", "name": "Teak Wood", "price": 500 }
+    {
+      "materialId": "66f1a2b3c4d5e6f7a8b9c0d1",
+      "name": "Teak Wood",
+      "price": 500,
+      "quantity": 2,
+      "totalPrice": 1000
+    }
   ],
   "totalBuildCost": 30000,
   "category": {
@@ -227,10 +233,22 @@ Resets password. OTP must be verified first.
 }
 ```
 
+**`materialList[]` item fields:**
+
+| Field | Type | Required | Rule | Notes |
+|---|---|---|---|---|
+| `materialId` | string (ObjectId) | yes | non-empty | `_id` of a `Material` document; stored as ObjectId reference |
+| `name` | string | yes | non-empty | Snapshot of material name at time of creation |
+| `price` | number | yes | `>= 0` | Unit price snapshot |
+| `quantity` | number | yes | `>= 1` | Number of units of this material used in the product |
+| `totalPrice` | number | yes | `>= 0` | Line total (typically `price × quantity`); client-supplied, not auto-computed |
+
 **Success (201):**
 ```json
 { "success": true, "message": "Product created successfully", "data": { ... } }
 ```
+
+**Errors:** `400` validation (missing or invalid `quantity` / `totalPrice` etc.) · `401` missing/invalid token
 
 ---
 
@@ -266,18 +284,281 @@ Resets password. OTP must be verified first.
 
 ### PUT `/api/products/:id`
 
-**Request Body** *(partial)*:
+**Request Body** *(partial — any subset of create-fields):*
 ```json
 { "mrp": 50000 }
 ```
 
-**Errors:** `404` Product not found
+When `materialList` is included in the update, every item must conform to the **same shape** as in `POST /api/products` (i.e. `materialId`, `name`, `price`, `quantity`, `totalPrice` are all required on every item — partial updates of individual line items are not supported).
+
+**Errors:** `400` validation · `401` missing/invalid token · `404` Product not found
 
 ---
 
 ### DELETE `/api/products/:id`
 
 **Errors:** `404` Product not found
+
+---
+
+## Order APIs *(Protected)*
+
+> All routes mount `authMiddleware` and require the `token` cookie issued at login.  
+> **Note on field naming:** the original `reference_images` field was renamed to `referenceImages` to match the camelCase convention used everywhere else in the project (`materialId`, `modelNo`, `totalBuildCost`, `clientName`, `soldPrice`, `productId`, etc.).
+
+### POST `/api/orders`
+
+**Request Body:**
+```json
+{
+  "referenceImages": ["orders/sample-1.jpg", "orders/sample-2.jpg"],
+  "productId": "66f1a2b3c4d5e6f7a8b9c0d1",
+  "clientName": "John",
+  "soldPrice": 100000
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `referenceImages` | string[] | no (defaults to `[]`) | Image paths/keys (same convention as `Product.images`) |
+| `productId` | string (ObjectId) | yes | Must reference an existing `Product` document |
+| `clientName` | string | no | Optional; if present must be non-empty |
+| `soldPrice` | number | yes | `>= 0` |
+
+**Success (201):**
+```json
+{
+  "success": true,
+  "message": "Order created successfully",
+  "data": {
+    "_id": "...",
+    "referenceImages": ["..."],
+    "productId": { "_id": "...", "modelNo": "...", "name": "...", "category": { ... }, ... },
+    "clientName": "John",
+    "soldPrice": 100000,
+    "createdAt": "...",
+    "updatedAt": "..."
+  }
+}
+```
+
+> `productId` in the response contains the **fully populated Product document** (via Mongoose `populate`).
+
+**Errors:** `400` validation / `productId` does not reference an existing product · `401` missing/invalid token
+
+---
+
+### GET `/api/orders?searchKey=&page=&limit=`
+
+| Query Param | Type | Default | Description |
+|---|---|---|---|
+| `searchKey` | string | — | Partial case-insensitive match on `clientName` |
+| `page` | number | 1 | Page number |
+| `limit` | number | 10 | Items per page |
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "Orders fetched successfully",
+  "data": {
+    "data": [
+      {
+        "_id": "...",
+        "referenceImages": ["..."],
+        "productId": { "_id": "...", "modelNo": "...", "name": "...", ... },
+        "clientName": "John",
+        "soldPrice": 100000,
+        "createdAt": "...",
+        "updatedAt": "..."
+      }
+    ],
+    "total": 50,
+    "page": 1,
+    "totalPages": 5
+  }
+}
+```
+
+Each item's `productId` is the populated `Product` document.
+
+**Errors:** `401` missing/invalid token
+
+---
+
+### GET `/api/orders/:id`
+
+Returns one order with the populated product.
+
+**Errors:** `401` · `404` Order not found
+
+---
+
+### PUT `/api/orders/:id`
+
+**Request Body** *(partial — any subset of the create fields):*
+```json
+{ "soldPrice": 95000 }
+```
+
+If `productId` is included in the update, it must reference an existing product.
+
+**Errors:** `400` validation or unknown `productId` · `401` · `404` Order not found
+
+---
+
+### DELETE `/api/orders/:id`
+
+**Errors:** `401` · `404` Order not found
+
+---
+
+## Dashboard APIs *(Protected)*
+
+> All routes mount `authMiddleware` and require the `token` cookie.
+
+### GET `/api/dashboard/overview`
+
+Headline tile metrics for the admin dashboard home.
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "Dashboard data fetched successfully",
+  "data": {
+    "totals": {
+      "orders": 120,
+      "sales": 4250000,
+      "products": 32,
+      "categories": 6,
+      "materials": 48,
+      "averageOrderValue": 35416.67
+    },
+    "today": { "orders": 2, "sales": 85000 },
+    "thisMonth": { "orders": 17, "sales": 540000 }
+  }
+}
+```
+
+---
+
+### GET `/api/dashboard/sales/monthly?year=YYYY`
+
+Always returns a **dense 12-point series** (Jan → Dec) for the requested year, ready for chart consumption.
+
+| Query Param | Type | Default | Notes |
+|---|---|---|---|
+| `year` | number | current year | `2000–2100` |
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "Dashboard data fetched successfully",
+  "data": {
+    "year": 2026,
+    "data": [
+      { "month": 1, "label": "Jan", "totalSales": 0, "orderCount": 0 },
+      { "month": 2, "label": "Feb", "totalSales": 120000, "orderCount": 3 },
+      ...
+      { "month": 12, "label": "Dec", "totalSales": 0, "orderCount": 0 }
+    ]
+  }
+}
+```
+
+Months with no orders return `totalSales: 0`, `orderCount: 0` (so the frontend never has to backfill gaps).
+
+---
+
+### GET `/api/dashboard/sales/yearly`
+
+Aggregated totals per year that has at least one order, sorted ascending.
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "Dashboard data fetched successfully",
+  "data": [
+    { "year": 2024, "totalSales": 1200000, "orderCount": 22 },
+    { "year": 2025, "totalSales": 3050000, "orderCount": 78 },
+    { "year": 2026, "totalSales": 540000, "orderCount": 17 }
+  ]
+}
+```
+
+---
+
+### GET `/api/dashboard/top-products?limit=5`
+
+Top-selling products ranked by total revenue (sum of `soldPrice`).
+
+| Query Param | Type | Default | Notes |
+|---|---|---|---|
+| `limit` | number | 5 | `1–100` |
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "Dashboard data fetched successfully",
+  "data": [
+    {
+      "productId": "66f1...",
+      "totalSales": 850000,
+      "orderCount": 7,
+      "product": { "_id": "66f1...", "modelNo": "LIV-001", "name": "Royal Sofa Set", "category": { ... }, ... }
+    }
+  ]
+}
+```
+
+`product` is the full Product document joined via `$lookup`; will be `null` if the underlying product has been deleted.
+
+---
+
+### GET `/api/dashboard/reports/csv?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`
+
+Streams a CSV file containing all orders in the inclusive date range.
+
+| Query Param | Type | Required | Notes |
+|---|---|---|---|
+| `startDate` | date (ISO string) | yes | Any value `new Date()` accepts |
+| `endDate` | date (ISO string) | yes | Must be `>= startDate`; treated as end-of-day inclusive |
+
+**Response headers:**
+```
+Content-Type: text/csv; charset=utf-8
+Content-Disposition: attachment; filename="sales-report-<start>_to_<end>.csv"
+```
+
+**Columns:** `Order ID, Date, Client Name, Product Model No, Product Name, Category, Sold Price`  
+A trailing block adds `Total Orders` and `Total Sales` summary rows.
+
+**Errors:** `400` invalid date range · `401`
+
+---
+
+### GET `/api/dashboard/reports/pdf?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`
+
+Streams a printable PDF sales report for the same date range, generated server-side via `pdfkit`.
+
+| Query Param | Type | Required | Notes |
+|---|---|---|---|
+| `startDate` | date (ISO string) | yes | Same rules as CSV export |
+| `endDate` | date (ISO string) | yes | Same rules as CSV export |
+
+**Response headers:**
+```
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="sales-report-<start>_to_<end>.pdf"
+```
+
+Contains: title, date range, paginated tabular order list, and `Total Orders` / `Total Sales` footer.
+
+**Errors:** `400` invalid date range · `401`
 
 ---
 

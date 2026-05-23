@@ -33,6 +33,16 @@ export const MESSAGES = {
   PRODUCT_NOT_FOUND: 'Product not found',
   PRODUCT_FETCHED: 'Products fetched successfully',
 
+  // Order
+  ORDER_CREATED: 'Order created successfully',
+  ORDER_UPDATED: 'Order updated successfully',
+  ORDER_DELETED: 'Order deleted successfully',
+  ORDER_NOT_FOUND: 'Order not found',
+  ORDER_FETCHED: 'Orders fetched successfully',
+
+  // Dashboard
+  DASHBOARD_FETCHED: 'Dashboard data fetched successfully',
+
   // Generic
   VALIDATION_ERROR: 'Validation error',
   INTERNAL_ERROR: 'Internal server error',

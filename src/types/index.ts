@@ -35,6 +35,8 @@ export interface IMaterialListItem {
   materialId: Types.ObjectId;
   name: string;
   price: number;
+  quantity: number;
+  totalPrice: number;
 }
 
 export interface IProductCategory {
@@ -50,6 +52,16 @@ export interface IProduct extends Document {
   materialList: IMaterialListItem[];
   totalBuildCost?: number;
   category: IProductCategory;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ─── Order ───────────────────────────────────────────────
+export interface IOrder extends Document {
+  referenceImages: string[];
+  productId: Types.ObjectId;
+  clientName?: string;
+  soldPrice: number;
   createdAt: Date;
   updatedAt: Date;
 }
