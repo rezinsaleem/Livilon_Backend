@@ -1,4 +1,5 @@
 import { Document, Types } from 'mongoose';
+import { MaterialCategory } from '../constants/materialCategories';
 
 // ─── User ────────────────────────────────────────────────
 export interface IUser extends Document {
@@ -26,6 +27,7 @@ export interface IMaterial extends Document {
   materialId: string;
   name: string;
   price: number;
+  materialCategory?: MaterialCategory | null;
   createdAt: Date;
   updatedAt: Date;
 }

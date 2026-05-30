@@ -3,7 +3,7 @@
 > **Document purpose:** Internal engineering reference for the Livilon Furniture Manufacturing Admin Backend.  
 > **Codebase scope:** All files under repository root as of analysis (46 tracked source/config files; no Docker/K8s/CI configs present).  
 > **Accuracy note:** Behavior described here is traced from actual code. Where documentation (`API_DOCS.md`) disagrees with code, **code wins** and discrepancies are called out explicitly.  
-> **Last updated:** `authMiddleware` is now enabled on all catalog route files (`category`, `material`, `product`). All catalog CRUD endpoints now require a valid JWT cookie. **New modules added:** Order CRUD (`/api/orders`) and Dashboard analytics + reports (`/api/dashboard`, including CSV/PDF export via `pdfkit`). The Product `materialList[]` item shape was extended with required `quantity` and `totalPrice` fields.
+> **Last updated:** `authMiddleware` is now enabled on all catalog route files (`category`, `material`, `product`). All catalog CRUD endpoints now require a valid JWT cookie. **New modules added:** Order CRUD (`/api/orders`) and Dashboard analytics + reports (`/api/dashboard`, including CSV/PDF export via `pdfkit`). The Product `materialList[]` item shape was extended with required `quantity` and `totalPrice` fields. **Material** now has an optional `materialCategory` enum field (one of 8 predefined values, or `null`), filterable on the list endpoint, with a new `GET /api/materials/categories` endpoint returning the enum.
 
 ---
 
@@ -102,6 +102,7 @@ Livilon_Backend/
     │   └── env.ts            # Zod-validated environment
     ├── constants/
     │   ├── httpStatus.ts
+    │   ├── materialCategories.ts
     │   └── messages.ts
     ├── controllers/          # HTTP adapters (try/catch → next(error))
     │   ├── auth.controller.ts
@@ -268,6 +269,7 @@ Validated at startup in `src/config/env.ts` via Zod (`safeParse` → `process.ex
 | `materialId` | String | required, **unique** (business code e.g. `MAT001`) |
 | `name` | String | required |
 | `price` | Number | required, min 0 |
+| `materialCategory` | String | optional; enum of 8 predefined values from `src/constants/materialCategories.ts` (`Plywood`, `MDF`, `PU foam sheet`, `EP sheet`, `Pins`, `Screws`, `Show beedings`, `Legs`) or `null`; default `null` |
 | timestamps | Date | auto |
 
 ### `Product` (`src/models/product.model.ts`)
@@ -520,10 +522,10 @@ Request → validate(loginSchema) → login → loginUser
 |--------|--------|
 | **Middleware** | `authMiddleware` → `validate(createMaterialSchema)` |
 | **Auth** | Required (JWT cookie) |
-| **Body** | `{ materialId, name, price }` |
+| **Body** | `{ materialId, name, price, materialCategory? }` — `materialCategory` is optional, may be one of the 8 enum values or `null` |
 | **Service** | `Material.create` |
 | **Success** | 201 (and refreshed `token` cookie) |
-| **Errors** | 401 missing/invalid token; 409 duplicate `materialId` (Mongo 11000 via error handler) |
+| **Errors** | 401 missing/invalid token; 400 invalid `materialCategory`; 409 duplicate `materialId` (Mongo 11000 via error handler) |
 
 ---
 
@@ -533,8 +535,9 @@ Request → validate(loginSchema) → login → loginUser
 |--------|--------|
 | **Middleware** | `authMiddleware` |
 | **Auth** | Required (JWT cookie) |
-| **Query** | `searchKey?` — regex on `name` OR `materialId` |
-| **Success** | 200 array |
+| **Query** | `searchKey?` — regex on `name` OR `materialId`; `materialCategory?` — exact-match filter on the enum |
+| **Service** | `getMaterials(searchKey, materialCategory)` — combines both filters (AND) when present |
+| **Success** | 200 array (each item includes `materialCategory`; legacy docs return `null`) |
 | **Errors** | 401 missing/invalid token |
 
 ---
@@ -545,8 +548,8 @@ Request → validate(loginSchema) → login → loginUser
 |--------|--------|
 | **Middleware** | `authMiddleware` → `validate(updateMaterialSchema)` |
 | **Auth** | Required (JWT cookie) |
-| **Body** | partial `{ materialId?, name?, price? }` |
-| **Errors** | 401 missing/invalid token; 404; 409 if duplicate materialId |
+| **Body** | partial `{ materialId?, name?, price?, materialCategory? }` — send `materialCategory: null` to clear, send an enum value to assign, omit to leave unchanged |
+| **Errors** | 401 missing/invalid token; 400 invalid `materialCategory`; 404; 409 if duplicate materialId |
 
 ---
 
@@ -557,6 +560,20 @@ Request → validate(loginSchema) → login → loginUser
 | **Middleware** | `authMiddleware` |
 | **Auth** | Required (JWT cookie) |
 | **Errors** | 401 missing/invalid token; 404 |
+
+---
+
+### 12a. GET `/api/materials/categories`
+
+| Aspect | Detail |
+|--------|--------|
+| **Controller** | `materialController.getCategories` |
+| **Middleware** | `authMiddleware` |
+| **Auth** | Required (JWT cookie) |
+| **Service** | `getMaterialCategories()` — returns a fresh copy of the readonly `MATERIAL_CATEGORIES` tuple from `src/constants/materialCategories.ts` (no DB hit) |
+| **Success** | 200 with `data: string[]` (the 8 predefined values in declaration order) |
+| **Errors** | 401 missing/invalid token |
+| **Notes** | Registered **before** `PUT /:id` / `DELETE /:id` in `material.routes.ts` so `categories` is never matched as an `:id` parameter |
 
 **Frontend mapping (inferred):** Materials inventory / BOM pricing admin screen.
 
@@ -911,7 +928,7 @@ A separate DB read per request adds latency; consider caching or trusting JWT cl
 |---------|-----------|------------------|
 | `auth.service` | `loginUser`, `forgotPassword`, `verifyOtp`, `resetPassword` | Auth + OTP state machine |
 | `category.service` | CRUD + search | Category collection |
-| `material.service` | CRUD + search | Material collection |
+| `material.service` | CRUD + search/category filter + `getMaterialCategories()` | Material collection + backend-owned enum |
 | `product.service` | CRUD + search + pagination | Product collection |
 | `order.service` | CRUD + search + pagination | Orders; FK-validates `productId` against Product on create/update; populates Product on every read |
 | `dashboard.service` | `getOverview`, `getMonthlySales`, `getYearlySales`, `getTopProducts`, `exportSalesCsv`, `exportSalesPdf` | Read-only analytics + report streaming |

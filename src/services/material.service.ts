@@ -2,17 +2,27 @@ import { Material } from '../models/material.model';
 import { AppError } from '../utils/customError';
 import { HTTP_STATUS } from '../constants/httpStatus';
 import { MESSAGES } from '../constants/messages';
+import {
+  MATERIAL_CATEGORIES,
+  MaterialCategory,
+} from '../constants/materialCategories';
 
-export const createMaterial = async (data: {
+type MaterialInput = {
   materialId: string;
   name: string;
   price: number;
-}) => {
+  materialCategory?: MaterialCategory | null;
+};
+
+export const createMaterial = async (data: MaterialInput) => {
   const material = await Material.create(data);
   return material;
 };
 
-export const getMaterials = async (searchKey?: string) => {
+export const getMaterials = async (
+  searchKey?: string,
+  materialCategory?: string
+) => {
   const filter: Record<string, unknown> = {};
 
   if (searchKey) {
@@ -22,13 +32,17 @@ export const getMaterials = async (searchKey?: string) => {
     ];
   }
 
+  if (materialCategory) {
+    filter.materialCategory = materialCategory;
+  }
+
   const materials = await Material.find(filter).sort({ createdAt: -1 });
   return materials;
 };
 
 export const updateMaterial = async (
   id: string,
-  data: Partial<{ materialId: string; name: string; price: number }>
+  data: Partial<MaterialInput>
 ) => {
   const material = await Material.findByIdAndUpdate(id, data, {
     new: true,
@@ -40,6 +54,10 @@ export const updateMaterial = async (
   }
 
   return material;
+};
+
+export const getMaterialCategories = () => {
+  return [...MATERIAL_CATEGORIES];
 };
 
 export const deleteMaterial = async (id: string) => {

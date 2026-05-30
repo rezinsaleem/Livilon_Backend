@@ -1,5 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 import { IMaterial } from '../types';
+import { MATERIAL_CATEGORIES } from '../constants/materialCategories';
 
 const materialSchema = new Schema<IMaterial>(
   {
@@ -18,6 +19,11 @@ const materialSchema = new Schema<IMaterial>(
       type: Number,
       required: true,
       min: 0,
+    },
+    materialCategory: {
+      type: String,
+      enum: [...MATERIAL_CATEGORIES, null],
+      default: null,
     },
   },
   {

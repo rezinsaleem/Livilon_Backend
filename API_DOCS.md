@@ -155,53 +155,149 @@ Resets password. OTP must be verified first.
 
 ## Material APIs *(🔒 Protected)*
 
+### Material Category enum
+
+A Material can optionally be tagged with one of the following **predefined** categories (case-sensitive). The list is owned by the backend and exposed via [`GET /api/materials/categories`](#get-apimaterialscategories).
+
+```
+Plywood
+MDF
+PU foam sheet
+EP sheet
+Pins
+Screws
+Show beedings
+Legs
+```
+
+`materialCategory` is optional everywhere: omit it, send `null`, or send one of the values above.
+
+---
+
+### GET `/api/materials/categories`
+
+Returns the predefined list of material categories the frontend should render in dropdowns / filters.
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "Material categories fetched successfully",
+  "data": [
+    "Plywood",
+    "MDF",
+    "PU foam sheet",
+    "EP sheet",
+    "Pins",
+    "Screws",
+    "Show beedings",
+    "Legs"
+  ]
+}
+```
+
+**Errors:** `401` missing/invalid token
+
+---
+
 ### POST `/api/materials`
 
 **Request Body:**
 ```json
-{ "materialId": "MAT001", "name": "Teak Wood", "price": 500 }
+{
+  "materialId": "MAT001",
+  "name": "Teak Wood",
+  "price": 500,
+  "materialCategory": "Plywood"
+}
 ```
+
+| Field | Type | Required | Rule |
+|---|---|---|---|
+| `materialId` | string | yes | non-empty, unique |
+| `name` | string | yes | non-empty |
+| `price` | number | yes | `>= 0` |
+| `materialCategory` | string \| null | no | If present, must be one of the 8 enum values (or `null`); omit to leave unset |
 
 **Success (201):**
 ```json
 {
   "success": true,
   "message": "Material created successfully",
-  "data": { "_id": "...", "materialId": "MAT001", "name": "Teak Wood", "price": 500, ... }
+  "data": {
+    "_id": "...",
+    "materialId": "MAT001",
+    "name": "Teak Wood",
+    "price": 500,
+    "materialCategory": "Plywood",
+    "createdAt": "...",
+    "updatedAt": "..."
+  }
 }
 ```
 
-**Errors:** `409` Duplicate materialId
+**Errors:** `400` validation (e.g. invalid `materialCategory` value) · `401` missing/invalid token · `409` Duplicate materialId
 
 ---
 
-### GET `/api/materials?searchKey=`
+### GET `/api/materials?searchKey=&materialCategory=`
 
 | Query Param | Type | Description |
 |---|---|---|
-| `searchKey` | string | Partial match on name or materialId |
+| `searchKey` | string | Partial case-insensitive match on `name` or `materialId` |
+| `materialCategory` | string | Exact-match filter on the enum value (e.g. `Plywood`); unknown values simply return an empty list |
+
+Both query params are optional and can be combined.
 
 **Success (200):**
 ```json
-{ "success": true, "message": "Materials fetched successfully", "data": [...] }
+{
+  "success": true,
+  "message": "Materials fetched successfully",
+  "data": [
+    {
+      "_id": "...",
+      "materialId": "MAT001",
+      "name": "Teak Wood",
+      "price": 500,
+      "materialCategory": "Plywood",
+      "createdAt": "...",
+      "updatedAt": "..."
+    }
+  ]
+}
 ```
+
+> Documents created before this field was introduced will return `materialCategory: null` (Mongoose default).
+
+**Errors:** `401` missing/invalid token
 
 ---
 
 ### PUT `/api/materials/:id`
 
-**Request Body** *(partial)*:
+**Request Body** *(partial — any subset of create fields):*
 ```json
 { "price": 600 }
 ```
 
-**Errors:** `404` Material not found
+To assign or change the category:
+```json
+{ "materialCategory": "MDF" }
+```
+
+To clear an existing category:
+```json
+{ "materialCategory": null }
+```
+
+**Errors:** `400` validation (e.g. invalid `materialCategory` value) · `401` missing/invalid token · `404` Material not found · `409` duplicate materialId
 
 ---
 
 ### DELETE `/api/materials/:id`
 
-**Errors:** `404` Material not found
+**Errors:** `401` missing/invalid token · `404` Material not found
 
 ---
 

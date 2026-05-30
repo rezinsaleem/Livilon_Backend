@@ -5,12 +5,13 @@ import {
   createMaterialSchema,
   updateMaterialSchema,
 } from '../validations/material.validation';
-// import { authMiddleware } from '../middlewares/auth.middleware';
+import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// router.use(authMiddleware);
+router.use(authMiddleware);
 
+router.get('/categories', materialController.getCategories);
 router.post('/', validate(createMaterialSchema), materialController.create);
 router.get('/', materialController.getAll);
 router.put('/:id', validate(updateMaterialSchema), materialController.update);

@@ -5,11 +5,11 @@ import {
   createProductSchema,
   updateProductSchema,
 } from '../validations/product.validation';
-// import { authMiddleware } from '../middlewares/auth.middleware';
+import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// router.use(authMiddleware);
+router.use(authMiddleware);
 
 router.post('/', validate(createProductSchema), productController.create);
 router.get('/', productController.getAll);

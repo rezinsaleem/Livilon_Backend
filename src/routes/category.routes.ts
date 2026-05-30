@@ -5,11 +5,11 @@ import {
   createCategorySchema,
   updateCategorySchema,
 } from '../validations/category.validation';
-// import { authMiddleware } from '../middlewares/auth.middleware';
+import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// router.use(authMiddleware);
+router.use(authMiddleware);
 
 router.post('/', validate(createCategorySchema), categoryController.create);
 router.get('/', categoryController.getAll);
