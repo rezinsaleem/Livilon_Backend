@@ -20,7 +20,12 @@ export const authMiddleware = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const token = req.cookies?.token;
+    const authHeader = req.headers.authorization;
+    const bearerToken =
+      authHeader && authHeader.startsWith('Bearer ')
+        ? authHeader.slice(7).trim()
+        : null;
+    const token = bearerToken || req.cookies?.token;
 
     if (!token) {
       throw new AppError(MESSAGES.TOKEN_MISSING, HTTP_STATUS.UNAUTHORIZED);

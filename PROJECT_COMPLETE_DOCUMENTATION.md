@@ -3,7 +3,7 @@
 > **Document purpose:** Internal engineering reference for the Livilon Furniture Manufacturing Admin Backend.  
 > **Codebase scope:** All files under repository root as of analysis (46 tracked source/config files; no Docker/K8s/CI configs present).  
 > **Accuracy note:** Behavior described here is traced from actual code. Where documentation (`API_DOCS.md`) disagrees with code, **code wins** and discrepancies are called out explicitly.  
-> **Last updated:** `authMiddleware` is now enabled on all catalog route files (`category`, `material`, `product`). All catalog CRUD endpoints now require a valid JWT cookie. **New modules added:** Order CRUD (`/api/orders`) and Dashboard analytics + reports (`/api/dashboard`, including CSV/PDF export via `pdfkit`). The Product `materialList[]` item shape was extended with required `quantity` and `totalPrice` fields. **Material** now has an optional `materialCategory` enum field (one of 8 predefined values, or `null`), filterable on the list endpoint, with a new `GET /api/materials/categories` endpoint returning the enum.
+> **Last updated:** `authMiddleware` is now enabled on all catalog route files (`category`, `material`, `product`). All catalog CRUD endpoints now require a valid JWT cookie. **New modules added:** Order CRUD (`/api/orders`) and Dashboard analytics + reports (`/api/dashboard`, including CSV/PDF export via `pdfkit`). The Product `materialList[]` item shape was extended with required `quantity` and `totalPrice` fields. **Material** now has an optional `materialCategory` enum field (one of 8 predefined values, or `null`), filterable on the list endpoint, with a new `GET /api/materials/categories` endpoint returning the enum. **Auth now supports dual transport:** the login endpoint returns the JWT in `data.token` (in addition to setting the HTTP-only cookie), and `authMiddleware` accepts either an `Authorization: Bearer <token>` header **or** the cookie — header takes precedence when both are present. This enables non-browser clients (Flutter, mobile, SPAs) to authenticate via standard `Authorization` header + localStorage / secure storage.
 
 ---
 
@@ -329,10 +329,14 @@ erDiagram
 
 ## Authentication mechanism
 
-1. **Login** (`POST /api/auth/login`): validates email/password against `User`, issues JWT via `generateToken({ id, email })`, sets HTTP-only cookie `token`.
-2. **Subsequent requests:** `authMiddleware` (if enabled) reads `req.cookies.token`, verifies JWT, reloads user from DB, optionally **refreshes** cookie (sliding session).
+1. **Login** (`POST /api/auth/login`): validates email/password against `User`, issues JWT via `generateToken({ id, email })`, **both** sets HTTP-only cookie `token` **and** returns the same JWT in the response body as `data.token` (alongside existing `id`/`email`/`userId` user fields).
+2. **Subsequent requests:** `authMiddleware` extracts the token using this precedence:
+   1. `Authorization: Bearer <token>` header (preferred for non-browser clients — Flutter, mobile, SPAs)
+   2. `req.cookies.token` (preferred for browser sessions)
+   It then verifies the JWT, reloads the user from DB, and re-issues the cookie (sliding session — harmless for header-only clients, which just ignore the `Set-Cookie` response).
 3. **JWT payload:** `{ id: string, email: string }` signed with `JWT_SECRET`, expiry `JWT_EXPIRES_IN` (default 15d).
 4. **Cookie options** (`cookie.util.ts`): `httpOnly: true`, `secure` in production, `sameSite` strict/lax, `maxAge` 15 days, `path: '/'`.
+5. **Bearer header token storage (client-side):** the frontend stores the JWT (e.g. `localStorage` on web, `flutter_secure_storage` on mobile) and attaches it to every request as `Authorization: Bearer <token>`. Logout is purely client-side — delete the stored token.
 
 ## Authorization
 
@@ -908,12 +912,12 @@ Uses synchronous `schema.parse()`. On Zod failure it **throws** without calling 
 
 ### `auth.middleware.ts` (active)
 
-Mounted as `router.use(authMiddleware)` on all three catalog routers. For every incoming request it:
+Mounted as `router.use(authMiddleware)` on the catalog, order, and dashboard routers. For every incoming request it:
 
-1. Reads `req.cookies.token`; throws `AppError(TOKEN_MISSING, 401)` if absent.
+1. Resolves the token from `Authorization: Bearer <token>` header **first**, then falls back to `req.cookies.token`. Throws `AppError(TOKEN_MISSING, 401)` if neither is present.
 2. `verifyToken(token)` decodes the JWT (`{ id, email }`) using `JWT_SECRET`; on failure throws `AppError(TOKEN_INVALID, 401)`.
 3. `User.findById(decoded.id).select('-password -otp -otpExpiry')` ensures the user still exists; otherwise `401 Unauthorized`.
-4. **Sliding session:** issues a fresh JWT via `generateToken` and re-sets the `token` cookie with `cookieOptions()` (15-day max-age). Each authenticated request resets the expiry window.
+4. **Sliding session:** issues a fresh JWT via `generateToken` and re-sets the `token` cookie with `cookieOptions()` (15-day max-age). Each authenticated request resets the expiry window for cookie-based clients. Header-only clients (e.g. Flutter) simply ignore the response cookie — the JWT they hold in storage continues to be valid until its original 15-day expiry; if you need sliding refresh for those clients too, add a `/api/auth/refresh` endpoint or include a refreshed token in a custom response header.
 5. Attaches `req.user = { id, email }` (typed via `AuthRequest`) for downstream handlers — though current controllers do not read it.
 
 A separate DB read per request adds latency; consider caching or trusting JWT claims if this becomes a bottleneck.

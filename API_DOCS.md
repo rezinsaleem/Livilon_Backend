@@ -2,7 +2,22 @@
 
 **Base URL:** `http://localhost:5000/api`
 
-All protected routes require a valid JWT token in an HTTP-only cookie (set automatically on login).
+## Authentication transports
+
+All protected routes accept a JWT through **either** of two transports — pick whichever fits your client. Both are checked on every request, so existing browser sessions and new mobile / Dart / SPA clients can coexist.
+
+1. **`Authorization` header (recommended for mobile / Flutter / non-browser clients):**
+   ```
+   Authorization: Bearer <token>
+   ```
+   The `Bearer ` prefix is required. The token is returned in the login response body (see `POST /api/auth/login` below) and should be stored client-side (e.g. `localStorage` on web, `flutter_secure_storage` on mobile).
+
+2. **HTTP-only cookie (default for browser sessions):**
+   The login endpoint also sets a `token` cookie automatically. Browser clients that send `credentials: 'include'` / `withCredentials: true` will be authenticated transparently.
+
+**Precedence:** when both are present, the `Authorization` header wins.
+
+A request that omits both returns `401 Access token is missing`. An invalid/expired token returns `401 Access token is invalid or expired`.
 
 ---
 
@@ -35,10 +50,25 @@ Login with admin credentials.
 {
   "success": true,
   "message": "Login successful",
-  "data": { "id": "...", "email": "admin@livilon.com", "userId": "ADMIN001" }
+  "data": {
+    "id": "...",
+    "email": "admin@livilon.com",
+    "userId": "ADMIN001",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
 }
 ```
-Sets `token` HTTP-only cookie.
+
+The response **both** sets an HTTP-only `token` cookie (for browser clients) **and** returns the JWT in `data.token` (for clients that auth via the `Authorization: Bearer <token>` header — e.g. Flutter, mobile, any non-browser caller).
+
+Clients that use Bearer auth should:
+
+1. Read `response.data.data.token` from this endpoint.
+2. Persist it (localStorage / `flutter_secure_storage` / Keychain).
+3. Attach it to every subsequent request as `Authorization: Bearer <token>`.
+4. On any `401`, clear the stored token and route back to login. Logout is purely client-side — delete the stored token.
+
+> **Compatibility:** `id`, `email`, `userId` remain in `data` exactly as before — only the additional `token` key has been added. Existing browser flows that read `data.id` / `data.email` continue to work unchanged.
 
 **Errors:** `401` Invalid credentials
 

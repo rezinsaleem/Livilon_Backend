@@ -11,7 +11,10 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     const result = await authService.loginUser(email, password);
 
     res.cookie('token', result.token, cookieOptions());
-    sendSuccess(res, HTTP_STATUS.OK, MESSAGES.LOGIN_SUCCESS, result.user);
+    sendSuccess(res, HTTP_STATUS.OK, MESSAGES.LOGIN_SUCCESS, {
+      ...result.user,
+      token: result.token,
+    });
   } catch (error) {
     next(error);
   }
