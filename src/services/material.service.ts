@@ -2,16 +2,18 @@ import { Material } from '../models/material.model';
 import { AppError } from '../utils/customError';
 import { HTTP_STATUS } from '../constants/httpStatus';
 import { MESSAGES } from '../constants/messages';
-import {
-  MATERIAL_CATEGORIES,
-  MaterialCategory,
-} from '../constants/materialCategories';
+
+type MaterialTypeInput = {
+  materialType: string;
+  price: number;
+};
 
 type MaterialInput = {
-  materialId: string;
-  name: string;
-  price: number;
-  materialCategory?: MaterialCategory | null;
+  materialCode: string;
+  materialName: string;
+  hasMultipleTypes: boolean;
+  price?: number;
+  materialTypes?: MaterialTypeInput[];
 };
 
 export const createMaterial = async (data: MaterialInput) => {
@@ -19,21 +21,14 @@ export const createMaterial = async (data: MaterialInput) => {
   return material;
 };
 
-export const getMaterials = async (
-  searchKey?: string,
-  materialCategory?: string
-) => {
+export const getMaterials = async (searchKey?: string) => {
   const filter: Record<string, unknown> = {};
 
   if (searchKey) {
     filter.$or = [
-      { name: { $regex: searchKey, $options: 'i' } },
-      { materialId: { $regex: searchKey, $options: 'i' } },
+      { materialName: { $regex: searchKey, $options: 'i' } },
+      { materialCode: { $regex: searchKey, $options: 'i' } },
     ];
-  }
-
-  if (materialCategory) {
-    filter.materialCategory = materialCategory;
   }
 
   const materials = await Material.find(filter).sort({ createdAt: -1 });
@@ -44,7 +39,25 @@ export const updateMaterial = async (
   id: string,
   data: Partial<MaterialInput>
 ) => {
-  const material = await Material.findByIdAndUpdate(id, data, {
+  const set: Partial<MaterialInput> = { ...data };
+  const unset: Record<string, ''> = {};
+
+  // When the type-mode is switched, drop the now-irrelevant field so the
+  // stored document always matches exactly one shape (price XOR materialTypes).
+  if (data.hasMultipleTypes === true) {
+    delete set.price;
+    unset.price = '';
+  } else if (data.hasMultipleTypes === false) {
+    delete set.materialTypes;
+    unset.materialTypes = '';
+  }
+
+  const updateQuery: Record<string, unknown> = { $set: set };
+  if (Object.keys(unset).length > 0) {
+    updateQuery.$unset = unset;
+  }
+
+  const material = await Material.findByIdAndUpdate(id, updateQuery, {
     new: true,
     runValidators: true,
   });
@@ -54,10 +67,6 @@ export const updateMaterial = async (
   }
 
   return material;
-};
-
-export const getMaterialCategories = () => {
-  return [...MATERIAL_CATEGORIES];
 };
 
 export const deleteMaterial = async (id: string) => {

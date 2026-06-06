@@ -8,9 +8,13 @@ const materialListItemSchema = new Schema(
       ref: 'Material',
       required: true,
     },
-    name: {
+    materialName: {
       type: String,
       required: true,
+    },
+    materialType: {
+      type: String,
+      default: undefined,
     },
     price: {
       type: Number,
@@ -57,6 +61,7 @@ const productSchema = new Schema<IProduct>(
       type: String,
       required: true,
       trim: true,
+      unique: true,
     },
     images: {
       type: [String],

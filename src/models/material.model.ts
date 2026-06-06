@@ -1,16 +1,9 @@
 import mongoose, { Schema } from 'mongoose';
 import { IMaterial } from '../types';
-import { MATERIAL_CATEGORIES } from '../constants/materialCategories';
 
-const materialSchema = new Schema<IMaterial>(
+const materialTypeSchema = new Schema(
   {
-    materialId: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-    },
-    name: {
+    materialType: {
       type: String,
       required: true,
       trim: true,
@@ -20,10 +13,41 @@ const materialSchema = new Schema<IMaterial>(
       required: true,
       min: 0,
     },
-    materialCategory: {
+  },
+  { _id: false }
+);
+
+const materialSchema = new Schema<IMaterial>(
+  {
+    materialCode: {
       type: String,
-      enum: [...MATERIAL_CATEGORIES, null],
-      default: null,
+      required: true,
+      unique: true,
+      trim: true,
+    },
+    materialName: {
+      type: String,
+      required: true,
+      trim: true,
+      unique: true,
+    },
+    hasMultipleTypes: {
+      type: Boolean,
+      required: true,
+      default: false,
+    },
+    // Single-price materials (hasMultipleTypes = false).
+    // Conditional presence is enforced by the Zod validation layer; kept
+    // optional here so update operations that switch type-mode stay clean.
+    price: {
+      type: Number,
+      min: 0,
+      default: undefined,
+    },
+    // Multi-type materials (hasMultipleTypes = true).
+    materialTypes: {
+      type: [materialTypeSchema],
+      default: undefined,
     },
   },
   {

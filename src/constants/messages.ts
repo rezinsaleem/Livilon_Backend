@@ -25,7 +25,6 @@ export const MESSAGES = {
   MATERIAL_DELETED: 'Material deleted successfully',
   MATERIAL_NOT_FOUND: 'Material not found',
   MATERIAL_FETCHED: 'Materials fetched successfully',
-  MATERIAL_CATEGORIES_FETCHED: 'Material categories fetched successfully',
 
   // Product
   PRODUCT_CREATED: 'Product created successfully',

@@ -1,5 +1,4 @@
 import { Document, Types } from 'mongoose';
-import { MaterialCategory } from '../constants/materialCategories';
 
 // ─── User ────────────────────────────────────────────────
 export interface IUser extends Document {
@@ -23,19 +22,32 @@ export interface ICategory extends Document {
 }
 
 // ─── Material ────────────────────────────────────────────
-export interface IMaterial extends Document {
-  materialId: string;
-  name: string;
+export interface IMaterialType {
+  materialType: string;
   price: number;
-  materialCategory?: MaterialCategory | null;
+}
+
+export interface IMaterial extends Document {
+  // Admin-entered business code (e.g. "MAT001"), unique. Distinct from the
+  // Mongo _id. Product.materialList[].materialId references the Material _id.
+  materialCode: string;
+  materialName: string;
+  hasMultipleTypes: boolean;
+  // Present only when hasMultipleTypes is false
+  price?: number;
+  // Present only when hasMultipleTypes is true
+  materialTypes?: IMaterialType[];
   createdAt: Date;
   updatedAt: Date;
 }
 
 // ─── Product ─────────────────────────────────────────────
 export interface IMaterialListItem {
+  // Mongo ObjectId referencing Material._id (NOT the Material.materialCode)
   materialId: Types.ObjectId;
-  name: string;
+  materialName: string;
+  // Selected type name when the source material has multiple types
+  materialType?: string;
   price: number;
   quantity: number;
   totalPrice: number;
@@ -61,6 +73,8 @@ export interface IProduct extends Document {
 // ─── Order ───────────────────────────────────────────────
 export interface IOrder extends Document {
   referenceImages: string[];
+  // Stored FK to Product._id. In API responses the populated product is
+  // exposed under the `productDetails` virtual and this raw key is stripped.
   productId: Types.ObjectId;
   clientName?: string;
   soldPrice: number;

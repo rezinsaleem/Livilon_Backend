@@ -3,7 +3,7 @@
 > **Document purpose:** Internal engineering reference for the Livilon Furniture Manufacturing Admin Backend.  
 > **Codebase scope:** All files under repository root as of analysis (46 tracked source/config files; no Docker/K8s/CI configs present).  
 > **Accuracy note:** Behavior described here is traced from actual code. Where documentation (`API_DOCS.md`) disagrees with code, **code wins** and discrepancies are called out explicitly.  
-> **Last updated:** `authMiddleware` is now enabled on all catalog route files (`category`, `material`, `product`). All catalog CRUD endpoints now require a valid JWT cookie. **New modules added:** Order CRUD (`/api/orders`) and Dashboard analytics + reports (`/api/dashboard`, including CSV/PDF export via `pdfkit`). The Product `materialList[]` item shape was extended with required `quantity` and `totalPrice` fields. **Material** now has an optional `materialCategory` enum field (one of 8 predefined values, or `null`), filterable on the list endpoint, with a new `GET /api/materials/categories` endpoint returning the enum. **Auth now supports dual transport:** the login endpoint returns the JWT in `data.token` (in addition to setting the HTTP-only cookie), and `authMiddleware` accepts either an `Authorization: Bearer <token>` header **or** the cookie — header takes precedence when both are present. This enables non-browser clients (Flutter, mobile, SPAs) to authenticate via standard `Authorization` header + localStorage / secure storage.
+> **Last updated:** `authMiddleware` is now enabled on all catalog route files (`category`, `material`, `product`). All catalog CRUD endpoints now require a valid JWT cookie. **New modules added:** Order CRUD (`/api/orders`) and Dashboard analytics + reports (`/api/dashboard`, including CSV/PDF export via `pdfkit`). The Product `materialList[]` item shape was extended with required `quantity` and `totalPrice` fields, then later **renamed `name`→`materialName` and given an optional `materialType`** for alignment with the new Material model. **Material was restructured:** `name`→`materialName`, plus a required `hasMultipleTypes` boolean that switches the record between single-price (`price`) and multi-type (`materialTypes[]` of `{ materialType, price }`) shapes; the earlier `materialCategory` enum and `GET /api/materials/categories` endpoint were **removed**. **Auth now supports dual transport:** the login endpoint returns the JWT in `data.token` (in addition to setting the HTTP-only cookie), and `authMiddleware` accepts either an `Authorization: Bearer <token>` header **or** the cookie — header takes precedence when both are present. This enables non-browser clients (Flutter, mobile, SPAs) to authenticate via standard `Authorization` header + localStorage / secure storage. **Latest:** Order responses now expose the populated product under **`productDetails`** (via a Mongoose virtual; the raw `productId` key is stripped from output). Added **uniqueness constraints**: Product `name` and Material `materialName` are now unique indexes, and `materialType` names must be unique within a material's `materialTypes[]` array (Zod-enforced, case-insensitive).
 
 ---
 
@@ -44,7 +44,7 @@
 
 - **Admin authentication** (login + forgot-password OTP flow via email)
 - **CRUD for product categories** (name + image path/key)
-- **CRUD for materials** (business `materialId`, name, price)
+- **CRUD for materials** (business `materialCode`, name, single price or multiple typed prices)
 - **CRUD for products** (model number, MRP, build cost, embedded material list, embedded category snapshot, image path array)
 
 There is **no public customer storefront API**, **no multi-tenant support**, **no role-based permissions**, **no file upload server**, **no payments**, **no WebSockets**, and **no job queues** in this repository.
@@ -102,7 +102,6 @@ Livilon_Backend/
     │   └── env.ts            # Zod-validated environment
     ├── constants/
     │   ├── httpStatus.ts
-    │   ├── materialCategories.ts
     │   └── messages.ts
     ├── controllers/          # HTTP adapters (try/catch → next(error))
     │   ├── auth.controller.ts
@@ -266,10 +265,11 @@ Validated at startup in `src/config/env.ts` via Zod (`safeParse` → `process.ex
 
 | Field | Type | Constraints |
 |-------|------|-------------|
-| `materialId` | String | required, **unique** (business code e.g. `MAT001`) |
-| `name` | String | required |
-| `price` | Number | required, min 0 |
-| `materialCategory` | String | optional; enum of 8 predefined values from `src/constants/materialCategories.ts` (`Plywood`, `MDF`, `PU foam sheet`, `EP sheet`, `Pins`, `Screws`, `Show beedings`, `Legs`) or `null`; default `null` |
+| `materialCode` | String | required, **unique** (admin-entered business code e.g. `MAT001`; renamed from `materialId` to avoid clashing with the ObjectId reference used in `Product.materialList[].materialId`) |
+| `materialName` | String | required, **unique** across materials (renamed from `name`) |
+| `hasMultipleTypes` | Boolean | required, default `false` — selects the record shape |
+| `price` | Number | min 0; present **only** when `hasMultipleTypes` is `false` (conditional via Zod; stored with `default: undefined`) |
+| `materialTypes` | Subdoc[] | present **only** when `hasMultipleTypes` is `true`; each item `{ materialType: String (required), price: Number (required, min 0) }`, `_id: false`. `materialType` names must be **unique within the array** (enforced in Zod, case-insensitive) |
 | timestamps | Date | auto |
 
 ### `Product` (`src/models/product.model.ts`)
@@ -277,10 +277,10 @@ Validated at startup in `src/config/env.ts` via Zod (`safeParse` → `process.ex
 | Field | Type | Constraints |
 |-------|------|-------------|
 | `modelNo` | String | required |
-| `name` | String | required |
+| `name` | String | required, **unique** across products |
 | `images` | String[] | default `[]` (URLs/paths only) |
 | `mrp` | Number | required, min 0 |
-| `materialList` | Subdoc[] | `materialId` → ObjectId ref Material, `name`, `price` (≥0), `quantity` (≥1, required), `totalPrice` (≥0, required, client-supplied line total) |
+| `materialList` | Subdoc[] | `materialId` → ObjectId ref Material, `materialName` (required), `materialType` (optional — selected type for multi-type materials), `price` (≥0), `quantity` (≥1, required), `totalPrice` (≥0, required, client-supplied line total) |
 | `totalBuildCost` | Number | default 0 |
 | `category` | Subdoc | `_id` → ObjectId ref Category, `name` |
 | timestamps | Date | auto |
@@ -292,12 +292,14 @@ Validated at startup in `src/config/env.ts` via Zod (`safeParse` → `process.ex
 | Field | Type | Constraints |
 |-------|------|-------------|
 | `referenceImages` | String[] | default `[]` (image paths/keys, same convention as `Product.images`) |
-| `productId` | ObjectId | required, **ref `Product`** (referential — populated on read; not a denormalized snapshot) |
+| `productId` | ObjectId | required, **ref `Product`** (stored FK; referential — not a denormalized snapshot) |
 | `clientName` | String | optional, trimmed |
 | `soldPrice` | Number | required, min 0 |
 | timestamps | Date | auto |
 
 **Indexes:** `{ createdAt: -1 }` (list ordering + date-range report queries) and `{ productId: 1 }` (top-products `$group` + foreign lookups).
+
+**Response shape:** the model defines a `productDetails` virtual (`ref: 'Product', localField: 'productId', justOne: true`) and reads populate that virtual. The `toJSON` transform strips the raw `productId` and the default `id` virtual, so every order API response exposes the populated product under **`productDetails`** (and never the raw `productId`).
 
 **Design note:** unlike `Product` (which embeds category/material snapshots), `Order` stores a **true reference** to `Product` via `Schema.Types.ObjectId, ref: 'Product'` and reads use Mongoose `populate`. This was a deliberate choice — orders need live product data for reporting/dashboard analytics, and the existing snapshot pattern would have made aggregations and joins (`$lookup` in dashboard) less reliable.
 
@@ -321,7 +323,7 @@ erDiagram
     }
 ```
 
-**No foreign-key enforcement** at application level when deleting Category/Material — Product documents retain stale embedded data. **Order, however,** validates `productId` existence on create/update in `order.service.ts` (production-safe guard added with the new module). Deleting a Product still does not cascade to Orders; Orders referencing a deleted Product will return `product: null` from dashboard `$lookup` queries and a `null`-like populated value from `populate('productId')`.
+**No foreign-key enforcement** at application level when deleting Category/Material — Product documents retain stale embedded data. **Order, however,** validates `productId` existence on create/update in `order.service.ts` (production-safe guard added with the new module). Deleting a Product still does not cascade to Orders; Orders referencing a deleted Product will return `product: null` from dashboard `$lookup` queries and a `null` `productDetails` from the populated virtual.
 
 ---
 
@@ -520,16 +522,18 @@ Request → validate(loginSchema) → login → loginUser
 
 > **Auth:** **Protected.** `router.use(authMiddleware)` runs before every handler. Requests must include the `token` cookie issued at login. Returns `401` if missing/invalid.
 
+> **Material shape:** a material is either **single-price** (`hasMultipleTypes: false` → `price` required, no `materialTypes`) or **multi-type** (`hasMultipleTypes: true` → `materialTypes[]` required, no `price`). Conditional rules are enforced by Zod (`superRefine`) in `material.validation.ts`. The previous `materialCategory` enum and `GET /api/materials/categories` endpoint have been removed.
+
 ### 9. POST `/api/materials`
 
 | Aspect | Detail |
 |--------|--------|
 | **Middleware** | `authMiddleware` → `validate(createMaterialSchema)` |
 | **Auth** | Required (JWT cookie) |
-| **Body** | `{ materialId, name, price, materialCategory? }` — `materialCategory` is optional, may be one of the 8 enum values or `null` |
+| **Body** | `{ materialCode, materialName, hasMultipleTypes, price?, materialTypes? }` — `price` required iff `hasMultipleTypes` is `false`; `materialTypes` (non-empty `{ materialType, price }[]`) required iff `hasMultipleTypes` is `true` |
 | **Service** | `Material.create` |
-| **Success** | 201 (and refreshed `token` cookie) |
-| **Errors** | 401 missing/invalid token; 400 invalid `materialCategory`; 409 duplicate `materialId` (Mongo 11000 via error handler) |
+| **Success** | 201 (single-price response has no `materialTypes`; multi-type response has no `price`) |
+| **Errors** | 401 missing/invalid token; 400 conditional validation (wrong combination of `price`/`materialTypes`); 409 duplicate `materialCode` (Mongo 11000 via error handler) |
 
 ---
 
@@ -539,9 +543,9 @@ Request → validate(loginSchema) → login → loginUser
 |--------|--------|
 | **Middleware** | `authMiddleware` |
 | **Auth** | Required (JWT cookie) |
-| **Query** | `searchKey?` — regex on `name` OR `materialId`; `materialCategory?` — exact-match filter on the enum |
-| **Service** | `getMaterials(searchKey, materialCategory)` — combines both filters (AND) when present |
-| **Success** | 200 array (each item includes `materialCategory`; legacy docs return `null`) |
+| **Query** | `searchKey?` — regex on `materialName` OR `materialCode` |
+| **Service** | `getMaterials(searchKey)` |
+| **Success** | 200 array; each item is either single-price (`price`) or multi-type (`materialTypes`) shaped |
 | **Errors** | 401 missing/invalid token |
 
 ---
@@ -552,8 +556,8 @@ Request → validate(loginSchema) → login → loginUser
 |--------|--------|
 | **Middleware** | `authMiddleware` → `validate(updateMaterialSchema)` |
 | **Auth** | Required (JWT cookie) |
-| **Body** | partial `{ materialId?, name?, price?, materialCategory? }` — send `materialCategory: null` to clear, send an enum value to assign, omit to leave unchanged |
-| **Errors** | 401 missing/invalid token; 400 invalid `materialCategory`; 404; 409 if duplicate materialId |
+| **Body** | partial `{ materialCode?, materialName?, hasMultipleTypes?, price?, materialTypes? }`. When `hasMultipleTypes` is supplied the same conditional rules apply; the service `$unset`s the now-irrelevant field (`price` when switching to multi-type, `materialTypes` when switching to single-price) so a stored doc always matches exactly one shape |
+| **Errors** | 401 missing/invalid token; 400 conditional validation; 404; 409 if duplicate materialCode |
 
 ---
 
@@ -564,20 +568,6 @@ Request → validate(loginSchema) → login → loginUser
 | **Middleware** | `authMiddleware` |
 | **Auth** | Required (JWT cookie) |
 | **Errors** | 401 missing/invalid token; 404 |
-
----
-
-### 12a. GET `/api/materials/categories`
-
-| Aspect | Detail |
-|--------|--------|
-| **Controller** | `materialController.getCategories` |
-| **Middleware** | `authMiddleware` |
-| **Auth** | Required (JWT cookie) |
-| **Service** | `getMaterialCategories()` — returns a fresh copy of the readonly `MATERIAL_CATEGORIES` tuple from `src/constants/materialCategories.ts` (no DB hit) |
-| **Success** | 200 with `data: string[]` (the 8 predefined values in declaration order) |
-| **Errors** | 401 missing/invalid token |
-| **Notes** | Registered **before** `PUT /:id` / `DELETE /:id` in `material.routes.ts` so `categories` is never matched as an `:id` parameter |
 
 **Frontend mapping (inferred):** Materials inventory / BOM pricing admin screen.
 
@@ -594,7 +584,7 @@ Request → validate(loginSchema) → login → loginUser
 | **Middleware** | `authMiddleware` → `validate(createProductSchema)` |
 | **Auth** | Required (JWT cookie) |
 | **Body** | See `createProductSchema` in `product.validation.ts` |
-| **Note** | `materialList[].materialId` validated as **string**; stored as ObjectId in MongoDB |
+| **Note** | `materialList[].materialId` is the Material's Mongo `_id` (not its `materialCode`); validated as **string**, stored as ObjectId in MongoDB |
 | **Service** | `Product.create` |
 | **Success** | 201 (and refreshed `token` cookie) |
 | **Errors** | 401 missing/invalid token; 400 validation |
@@ -658,9 +648,9 @@ Request → validate(loginSchema) → login → loginUser
 | **Middleware** | `authMiddleware` → `validate(createOrderSchema)` |
 | **Auth** | Required (JWT cookie) |
 | **Body** | `{ referenceImages?, productId, clientName?, soldPrice }` |
-| **Service** | `orderService.createOrder` — verifies `productId` exists via `Product.findById`, then `Order.create`, then `order.populate('productId')` |
+| **Service** | `orderService.createOrder` — verifies `productId` exists via `Product.findById`, then `Order.create`, then `order.populate('productDetails')` |
 | **DB** | 1 read (Product existence) + 1 write (Order) + 1 populate read |
-| **Success** | 201, returns the new order with `productId` populated to the full Product document |
+| **Success** | 201, returns the new order with the Product populated under `productDetails` (raw `productId` stripped) |
 | **Errors** | 400 validation / unknown `productId`; 401 missing/invalid token |
 
 ### 19. GET `/api/orders?searchKey=&page=&limit=`
@@ -670,7 +660,7 @@ Request → validate(loginSchema) → login → loginUser
 | **Controller** | `orderController.getAll` |
 | **Middleware** | `authMiddleware` |
 | **Query** | `searchKey` (case-insensitive regex on `clientName`), `page` (default 1), `limit` (default 10) |
-| **Service** | `getOrders` — parallel `find().populate('productId').sort({ createdAt: -1 }).skip().limit()` and `countDocuments` |
+| **Service** | `getOrders` — parallel `find().populate('productDetails').sort({ createdAt: -1 }).skip().limit()` and `countDocuments`; each item exposes the product under `productDetails` |
 | **Success** | 200, `data: { data, total, page, totalPages }` — same envelope as Products list |
 | **Errors** | 401 |
 
@@ -678,7 +668,7 @@ Request → validate(loginSchema) → login → loginUser
 
 | Aspect | Detail |
 |--------|--------|
-| **Service** | `getOrderById` — `findById(id).populate('productId')` |
+| **Service** | `getOrderById` — `findById(id).populate('productDetails')` |
 | **Errors** | 401; 404 Order not found |
 
 ### 21. PUT `/api/orders/:id`
@@ -687,7 +677,7 @@ Request → validate(loginSchema) → login → loginUser
 |--------|--------|
 | **Middleware** | `authMiddleware` → `validate(updateOrderSchema)` |
 | **Body** | Partial subset of the create-schema fields |
-| **Service** | If `productId` provided, re-verifies it exists, then `findByIdAndUpdate(..., { new: true, runValidators: true }).populate('productId')` |
+| **Service** | If `productId` provided, re-verifies it exists, then `findByIdAndUpdate(..., { new: true, runValidators: true }).populate('productDetails')` |
 | **Errors** | 400 validation / unknown `productId`; 401; 404 |
 
 ### 22. DELETE `/api/orders/:id`
@@ -868,7 +858,7 @@ Straight pass-through: validate → service → Mongoose. Search is optional reg
 
 ## 6. Material CRUD workflow
 
-Same as category. Unique `materialId` enforced by MongoDB index → 409 on duplicate.
+Same as category. Unique `materialCode` enforced by MongoDB index → 409 on duplicate.
 
 ## 7. Product CRUD workflow
 
@@ -932,7 +922,7 @@ A separate DB read per request adds latency; consider caching or trusting JWT cl
 |---------|-----------|------------------|
 | `auth.service` | `loginUser`, `forgotPassword`, `verifyOtp`, `resetPassword` | Auth + OTP state machine |
 | `category.service` | CRUD + search | Category collection |
-| `material.service` | CRUD + search/category filter + `getMaterialCategories()` | Material collection + backend-owned enum |
+| `material.service` | CRUD + search by `materialName`/`materialCode`; update `$unset`s irrelevant field on type-mode switch | Material collection (single-price XOR multi-type) |
 | `product.service` | CRUD + search + pagination | Product collection |
 | `order.service` | CRUD + search + pagination | Orders; FK-validates `productId` against Product on create/update; populates Product on every read |
 | `dashboard.service` | `getOverview`, `getMonthlySales`, `getYearlySales`, `getTopProducts`, `exportSalesCsv`, `exportSalesPdf` | Read-only analytics + report streaming |
@@ -1021,7 +1011,7 @@ A separate DB read per request adds latency; consider caching or trusting JWT cl
 2. **Denormalized product data** — category and materials copied into product documents for read performance / offline snapshot; integrity is client's responsibility.
 3. **MRP vs totalBuildCost** — both stored; no server rule that `mrp >= totalBuildCost`.
 4. **Image fields** — opaque strings (likely S3/CDN keys managed elsewhere).
-5. **materialId in Material** vs **materialId in Product.materialList** — Product uses MongoDB `_id` of Material document in subdoc; Material also has business `materialId` string field — naming collision risk for API consumers.
+5. **`materialCode` (Material) vs `materialId` (Product.materialList)** — the Material's admin-entered business code is `materialCode` (e.g. `MAT001`); the Product subdoc reference `materialList[].materialId` is the MongoDB `_id` (ObjectId) of the Material. These were previously both named `materialId` (a naming collision); the Material field was renamed to `materialCode` to remove the ambiguity, so `materialId` now consistently means a Mongo ObjectId.
 6. **OTP gate** — `isOtpVerified` must be true before password reset; flag cleared after reset.
 
 ---

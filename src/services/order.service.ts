@@ -12,7 +12,7 @@ export const createOrder = async (data: Partial<IOrder>) => {
   }
 
   const order = await Order.create(data);
-  await order.populate('productId');
+  await order.populate('productDetails');
   return order;
 };
 
@@ -31,7 +31,7 @@ export const getOrders = async (
 
   const [data, total] = await Promise.all([
     Order.find(filter)
-      .populate('productId')
+      .populate('productDetails')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit),
@@ -47,7 +47,7 @@ export const getOrders = async (
 };
 
 export const getOrderById = async (id: string) => {
-  const order = await Order.findById(id).populate('productId');
+  const order = await Order.findById(id).populate('productDetails');
 
   if (!order) {
     throw new AppError(MESSAGES.ORDER_NOT_FOUND, HTTP_STATUS.NOT_FOUND);
@@ -67,7 +67,7 @@ export const updateOrder = async (id: string, data: Partial<IOrder>) => {
   const order = await Order.findByIdAndUpdate(id, data, {
     new: true,
     runValidators: true,
-  }).populate('productId');
+  }).populate('productDetails');
 
   if (!order) {
     throw new AppError(MESSAGES.ORDER_NOT_FOUND, HTTP_STATUS.NOT_FOUND);

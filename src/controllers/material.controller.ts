@@ -15,30 +15,11 @@ export const create = async (req: Request, res: Response, next: NextFunction) =>
 
 export const getAll = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { searchKey, materialCategory } = req.query;
+    const { searchKey } = req.query;
     const materials = await materialService.getMaterials(
-      searchKey as string | undefined,
-      materialCategory as string | undefined
+      searchKey as string | undefined
     );
     sendSuccess(res, HTTP_STATUS.OK, MESSAGES.MATERIAL_FETCHED, materials);
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const getCategories = async (
-  _req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const categories = materialService.getMaterialCategories();
-    sendSuccess(
-      res,
-      HTTP_STATUS.OK,
-      MESSAGES.MATERIAL_CATEGORIES_FETCHED,
-      categories
-    );
   } catch (error) {
     next(error);
   }

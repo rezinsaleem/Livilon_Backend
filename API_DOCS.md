@@ -185,99 +185,102 @@ Resets password. OTP must be verified first.
 
 ## Material APIs *(🔒 Protected)*
 
-### Material Category enum
+A Material is either **single-price** or **multi-type**, controlled by the boolean `hasMultipleTypes`:
 
-A Material can optionally be tagged with one of the following **predefined** categories (case-sensitive). The list is owned by the backend and exposed via [`GET /api/materials/categories`](#get-apimaterialscategories).
+| `hasMultipleTypes` | `price` | `materialTypes` |
+|---|---|---|
+| `false` | **required** (the single price) | must **not** be sent |
+| `true` | must **not** be sent | **required**, non-empty array of `{ materialType, price }` |
 
-```
-Plywood
-MDF
-PU foam sheet
-EP sheet
-Pins
-Screws
-Show beedings
-Legs
-```
+> **Removed:** the previous hardcoded material-categories feature (`materialCategory` field and `GET /api/materials/categories`) has been fully removed.
 
-`materialCategory` is optional everywhere: omit it, send `null`, or send one of the values above.
+### Field reference
 
----
+> **Naming:** the admin-entered business code is `materialCode` (e.g. `"MAT001"`). This is **not** the Mongo `_id`. When a material is added to a product, the product's `materialList[].materialId` stores the Material's Mongo `_id` (ObjectId), not its `materialCode`.
 
-### GET `/api/materials/categories`
-
-Returns the predefined list of material categories the frontend should render in dropdowns / filters.
-
-**Success (200):**
-```json
-{
-  "success": true,
-  "message": "Material categories fetched successfully",
-  "data": [
-    "Plywood",
-    "MDF",
-    "PU foam sheet",
-    "EP sheet",
-    "Pins",
-    "Screws",
-    "Show beedings",
-    "Legs"
-  ]
-}
-```
-
-**Errors:** `401` missing/invalid token
+| Field | Type | Required | Rule |
+|---|---|---|---|
+| `materialCode` | string | yes | non-empty, **unique** (admin-entered business code, e.g. `MAT001`) |
+| `materialName` | string | yes | non-empty, **unique** across materials |
+| `hasMultipleTypes` | boolean | yes | decides which of `price` / `materialTypes` applies |
+| `price` | number | conditional | required & only allowed when `hasMultipleTypes` is `false`; `>= 0` |
+| `materialTypes` | array | conditional | required & only allowed when `hasMultipleTypes` is `true`; each item `{ materialType: string, price: number >= 0 }`. The `materialType` names must be **unique within the array** (case-insensitive) |
 
 ---
 
 ### POST `/api/materials`
 
-**Request Body:**
+**Request Body — single-price material (`hasMultipleTypes: false`):**
 ```json
 {
-  "materialId": "MAT001",
-  "name": "Teak Wood",
-  "price": 500,
-  "materialCategory": "Plywood"
+  "materialCode": "MAT001",
+  "materialName": "Teak Wood",
+  "hasMultipleTypes": false,
+  "price": 500
 }
 ```
 
-| Field | Type | Required | Rule |
-|---|---|---|---|
-| `materialId` | string | yes | non-empty, unique |
-| `name` | string | yes | non-empty |
-| `price` | number | yes | `>= 0` |
-| `materialCategory` | string \| null | no | If present, must be one of the 8 enum values (or `null`); omit to leave unset |
+**Request Body — multi-type material (`hasMultipleTypes: true`):**
+```json
+{
+  "materialCode": "MAT002",
+  "materialName": "Steel",
+  "hasMultipleTypes": true,
+  "materialTypes": [
+    { "materialType": "Grade A", "price": 100 },
+    { "materialType": "Grade B", "price": 120 }
+  ]
+}
+```
 
-**Success (201):**
+**Success (201) — single-price:**
 ```json
 {
   "success": true,
   "message": "Material created successfully",
   "data": {
     "_id": "...",
-    "materialId": "MAT001",
-    "name": "Teak Wood",
+    "materialCode": "MAT001",
+    "materialName": "Teak Wood",
+    "hasMultipleTypes": false,
     "price": 500,
-    "materialCategory": "Plywood",
     "createdAt": "...",
     "updatedAt": "..."
   }
 }
 ```
 
-**Errors:** `400` validation (e.g. invalid `materialCategory` value) · `401` missing/invalid token · `409` Duplicate materialId
+**Success (201) — multi-type:**
+```json
+{
+  "success": true,
+  "message": "Material created successfully",
+  "data": {
+    "_id": "...",
+    "materialCode": "MAT002",
+    "materialName": "Steel",
+    "hasMultipleTypes": true,
+    "materialTypes": [
+      { "materialType": "Grade A", "price": 100 },
+      { "materialType": "Grade B", "price": 120 }
+    ],
+    "createdAt": "...",
+    "updatedAt": "..."
+  }
+}
+```
+
+> A single-price material's response has **no** `materialTypes` key; a multi-type material's response has **no** `price` key.
+
+**Errors:** `400` validation (e.g. `price` sent with `hasMultipleTypes: true`, empty `materialTypes`, or duplicate `materialType` names within the array) · `401` missing/invalid token · `409` Duplicate `materialCode` or `materialName`
 
 ---
 
-### GET `/api/materials?searchKey=&materialCategory=`
+### GET `/api/materials?searchKey=`
 
 | Query Param | Type | Description |
 |---|---|---|
-| `searchKey` | string | Partial case-insensitive match on `name` or `materialId` |
-| `materialCategory` | string | Exact-match filter on the enum value (e.g. `Plywood`); unknown values simply return an empty list |
-
-Both query params are optional and can be combined.
+| `searchKey` | string | Partial case-insensitive match on `materialName` or `materialCode` |
 
 **Success (200):**
 ```json
@@ -287,10 +290,21 @@ Both query params are optional and can be combined.
   "data": [
     {
       "_id": "...",
-      "materialId": "MAT001",
-      "name": "Teak Wood",
+      "materialCode": "MAT002",
+      "materialName": "Steel",
+      "hasMultipleTypes": true,
+      "materialTypes": [
+        { "materialType": "Grade A", "price": 100 }
+      ],
+      "createdAt": "...",
+      "updatedAt": "..."
+    },
+    {
+      "_id": "...",
+      "materialCode": "MAT001",
+      "materialName": "Teak Wood",
+      "hasMultipleTypes": false,
       "price": 500,
-      "materialCategory": "Plywood",
       "createdAt": "...",
       "updatedAt": "..."
     }
@@ -298,30 +312,36 @@ Both query params are optional and can be combined.
 }
 ```
 
-> Documents created before this field was introduced will return `materialCategory: null` (Mongoose default).
-
 **Errors:** `401` missing/invalid token
 
 ---
 
 ### PUT `/api/materials/:id`
 
-**Request Body** *(partial — any subset of create fields):*
+Partial update. The same conditional rules apply **when `hasMultipleTypes` is included** in the body. Switching `hasMultipleTypes` automatically drops the now-irrelevant field from the stored document (`price` is removed when switching to multi-type; `materialTypes` is removed when switching to single-price).
+
+**Update a single price:**
 ```json
 { "price": 600 }
 ```
 
-To assign or change the category:
+**Switch a material to multi-type:**
 ```json
-{ "materialCategory": "MDF" }
+{
+  "hasMultipleTypes": true,
+  "materialTypes": [
+    { "materialType": "Grade A", "price": 100 },
+    { "materialType": "Grade B", "price": 120 }
+  ]
+}
 ```
 
-To clear an existing category:
+**Switch a material to single-price:**
 ```json
-{ "materialCategory": null }
+{ "hasMultipleTypes": false, "price": 500 }
 ```
 
-**Errors:** `400` validation (e.g. invalid `materialCategory` value) · `401` missing/invalid token · `404` Material not found · `409` duplicate materialId
+**Errors:** `400` validation (incl. duplicate `materialType` names within the array) · `401` missing/invalid token · `404` Material not found · `409` duplicate `materialCode` or `materialName`
 
 ---
 
@@ -345,10 +365,11 @@ To clear an existing category:
   "materialList": [
     {
       "materialId": "66f1a2b3c4d5e6f7a8b9c0d1",
-      "name": "Teak Wood",
-      "price": 500,
+      "materialName": "Steel",
+      "materialType": "Grade A",
+      "price": 100,
       "quantity": 2,
-      "totalPrice": 1000
+      "totalPrice": 200
     }
   ],
   "totalBuildCost": 30000,
@@ -363,9 +384,10 @@ To clear an existing category:
 
 | Field | Type | Required | Rule | Notes |
 |---|---|---|---|---|
-| `materialId` | string (ObjectId) | yes | non-empty | `_id` of a `Material` document; stored as ObjectId reference |
-| `name` | string | yes | non-empty | Snapshot of material name at time of creation |
-| `price` | number | yes | `>= 0` | Unit price snapshot |
+| `materialId` | string (ObjectId) | yes | non-empty | The Mongo `_id` of a `Material` document (**not** its `materialCode`); stored as an ObjectId reference |
+| `materialName` | string | yes | non-empty | Snapshot of the material name at time of creation (renamed from `name`) |
+| `materialType` | string | no | non-empty if present | Snapshot of the **selected type** when the source material has `hasMultipleTypes: true`; omit for single-price materials |
+| `price` | number | yes | `>= 0` | Unit price snapshot (the chosen type's price for multi-type materials) |
 | `quantity` | number | yes | `>= 1` | Number of units of this material used in the product |
 | `totalPrice` | number | yes | `>= 0` | Line total (typically `price × quantity`); client-supplied, not auto-computed |
 
@@ -374,7 +396,9 @@ To clear an existing category:
 { "success": true, "message": "Product created successfully", "data": { ... } }
 ```
 
-**Errors:** `400` validation (missing or invalid `quantity` / `totalPrice` etc.) · `401` missing/invalid token
+> **Uniqueness:** product `name` must be **unique** across all products. A duplicate name returns `409`.
+
+**Errors:** `400` validation (missing or invalid `quantity` / `totalPrice` etc.) · `401` missing/invalid token · `409` Duplicate product `name`
 
 ---
 
@@ -415,9 +439,9 @@ To clear an existing category:
 { "mrp": 50000 }
 ```
 
-When `materialList` is included in the update, every item must conform to the **same shape** as in `POST /api/products` (i.e. `materialId`, `name`, `price`, `quantity`, `totalPrice` are all required on every item — partial updates of individual line items are not supported).
+When `materialList` is included in the update, every item must conform to the **same shape** as in `POST /api/products` (i.e. `materialId`, `materialName`, `price`, `quantity`, `totalPrice` are all required on every item, `materialType` is optional — partial updates of individual line items are not supported).
 
-**Errors:** `400` validation · `401` missing/invalid token · `404` Product not found
+**Errors:** `400` validation · `401` missing/invalid token · `404` Product not found · `409` Duplicate product `name`
 
 ---
 
@@ -459,7 +483,7 @@ When `materialList` is included in the update, every item must conform to the **
   "data": {
     "_id": "...",
     "referenceImages": ["..."],
-    "productId": { "_id": "...", "modelNo": "...", "name": "...", "category": { ... }, ... },
+    "productDetails": { "_id": "...", "modelNo": "...", "name": "...", "category": { ... }, ... },
     "clientName": "John",
     "soldPrice": 100000,
     "createdAt": "...",
@@ -468,7 +492,7 @@ When `materialList` is included in the update, every item must conform to the **
 }
 ```
 
-> `productId` in the response contains the **fully populated Product document** (via Mongoose `populate`).
+> The request body sends the FK as `productId`, but in **every response** the populated Product document is returned under `productDetails` (via a Mongoose virtual). The raw `productId` key is stripped from the response.
 
 **Errors:** `400` validation / `productId` does not reference an existing product · `401` missing/invalid token
 
@@ -492,7 +516,7 @@ When `materialList` is included in the update, every item must conform to the **
       {
         "_id": "...",
         "referenceImages": ["..."],
-        "productId": { "_id": "...", "modelNo": "...", "name": "...", ... },
+        "productDetails": { "_id": "...", "modelNo": "...", "name": "...", ... },
         "clientName": "John",
         "soldPrice": 100000,
         "createdAt": "...",
@@ -506,7 +530,7 @@ When `materialList` is included in the update, every item must conform to the **
 }
 ```
 
-Each item's `productId` is the populated `Product` document.
+Each item's `productDetails` is the populated `Product` document (the raw `productId` key is not returned).
 
 **Errors:** `401` missing/invalid token
 
@@ -514,7 +538,7 @@ Each item's `productId` is the populated `Product` document.
 
 ### GET `/api/orders/:id`
 
-Returns one order with the populated product.
+Returns one order with the populated product under `productDetails`.
 
 **Errors:** `401` · `404` Order not found
 
