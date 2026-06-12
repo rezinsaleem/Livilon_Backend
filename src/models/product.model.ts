@@ -80,6 +80,11 @@ const productSchema = new Schema<IProduct>(
       type: Number,
       default: 0,
     },
+    seats: {
+      type: Number,
+      min: 0,
+      default: undefined,
+    },
     category: {
       type: productCategorySchema,
       required: true,

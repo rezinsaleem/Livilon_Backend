@@ -373,12 +373,26 @@ Partial update. The same conditional rules apply **when `hasMultipleTypes` is in
     }
   ],
   "totalBuildCost": 30000,
+  "seats": 5,
   "category": {
     "_id": "66f1a2b3c4d5e6f7a8b9c0d2",
     "name": "Living Room"
   }
 }
 ```
+
+**Top-level fields:**
+
+| Field | Type | Required | Rule | Notes |
+|---|---|---|---|---|
+| `modelNo` | string | yes | non-empty | Product model number |
+| `name` | string | yes | non-empty, unique | Product name (must be unique across all products) |
+| `images` | string[] | no (defaults to `[]`) | — | Image paths/keys |
+| `mrp` | number | yes | `>= 0` | Maximum retail price |
+| `materialList` | object[] | no (defaults to `[]`) | — | See item fields below |
+| `totalBuildCost` | number | no | `>= 0` | Total cost to build the product |
+| `seats` | number | no | `>= 0` | Optional seating capacity of the product |
+| `category` | object | yes | — | `{ _id, name }` |
 
 **`materialList[]` item fields:**
 

@@ -39,7 +39,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.get("/", (req, res) => {
-  res.send("welcome to livilon! ✌");
+  res.send("welcome to livilon!");
 });
 
 app.set("trust proxy", 1); // for rate limiting in northflank

@@ -21,6 +21,7 @@ export const createProductSchema = z.object({
   mrp: z.number().min(0, 'MRP must be a non-negative number'),
   materialList: z.array(materialListItemSchema).default([]),
   totalBuildCost: z.number().min(0).optional(),
+  seats: z.number().min(0).optional(),
   category: productCategorySchema,
 });
 
@@ -31,5 +32,6 @@ export const updateProductSchema = z.object({
   mrp: z.number().min(0).optional(),
   materialList: z.array(materialListItemSchema).optional(),
   totalBuildCost: z.number().min(0).optional(),
+  seats: z.number().min(0).optional(),
   category: productCategorySchema.optional(),
 });

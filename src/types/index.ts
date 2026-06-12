@@ -65,6 +65,7 @@ export interface IProduct extends Document {
   mrp: number;
   materialList: IMaterialListItem[];
   totalBuildCost?: number;
+  seats?: number;
   category: IProductCategory;
   createdAt: Date;
   updatedAt: Date;
