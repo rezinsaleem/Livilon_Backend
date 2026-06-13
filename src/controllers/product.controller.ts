@@ -36,6 +36,19 @@ export const getById = async (req: Request, res: Response, next: NextFunction) =
   }
 };
 
+export const getReferenceImages = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const images = await productService.getProductReferenceImages(req.params.id);
+    sendSuccess(res, HTTP_STATUS.OK, MESSAGES.PRODUCT_FETCHED, images);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const update = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const product = await productService.updateProduct(req.params.id, req.body);

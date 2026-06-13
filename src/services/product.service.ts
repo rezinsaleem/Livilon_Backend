@@ -1,4 +1,5 @@
 import { Product } from '../models/product.model';
+import { Order } from '../models/order.model';
 import { AppError } from '../utils/customError';
 import { HTTP_STATUS } from '../constants/httpStatus';
 import { MESSAGES } from '../constants/messages';
@@ -46,6 +47,28 @@ export const getProductById = async (id: string) => {
   }
 
   return product;
+};
+
+/**
+ * Collects customer "reference images" for a product from its orders.
+ * These are real photos customers shared when ordering this product, surfaced
+ * publicly on the showcase as a customer gallery. Returns a de-duplicated,
+ * newest-first list of image strings. Throws 404 if the product doesn't exist.
+ */
+export const getProductReferenceImages = async (id: string): Promise<string[]> => {
+  const product = await Product.findById(id).select('_id');
+  if (!product) {
+    throw new AppError(MESSAGES.PRODUCT_NOT_FOUND, HTTP_STATUS.NOT_FOUND);
+  }
+
+  const orders = await Order.find({ productId: id })
+    .select('referenceImages createdAt')
+    .sort({ createdAt: -1 });
+
+  const images = orders.flatMap((order) => order.referenceImages || []).filter(Boolean);
+
+  // De-duplicate while preserving (newest-first) order.
+  return Array.from(new Set(images));
 };
 
 export const updateProduct = async (id: string, data: Partial<IProduct>) => {

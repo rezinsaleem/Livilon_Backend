@@ -450,6 +450,25 @@ Partial update. The same conditional rules apply **when `hasMultipleTypes` is in
 
 ---
 
+### GET `/api/products/:id/reference-images` *(Public)*
+
+Returns the **customer reference images** for a product — real photos customers shared on their orders for this product. Aggregated across all orders referencing the product, de-duplicated, newest-first. Used by the showcase to display a customer gallery.
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "Product fetched successfully",
+  "data": ["orders/ref-1.jpg", "orders/ref-2.jpg"]
+}
+```
+
+`data` is a (possibly empty) array of image strings (same convention as `Product.images`).
+
+**Errors:** `404` Product not found
+
+---
+
 ### PUT `/api/products/:id` *(🔒 Protected)*
 
 **Request Body** *(partial — any subset of create-fields):*
