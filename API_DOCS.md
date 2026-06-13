@@ -128,9 +128,11 @@ Resets password. OTP must be verified first.
 
 ---
 
-## Category APIs *(🔒 Protected)*
+## Category APIs
 
-### POST `/api/categories`
+> **Access:** `GET /api/categories` is **public** (no auth) — used by the customer showcase. All write operations (`POST` / `PUT` / `DELETE`) are **🔒 protected** and require a valid JWT.
+
+### POST `/api/categories` *(🔒 Protected)*
 
 **Request Body:**
 ```json
@@ -148,7 +150,7 @@ Resets password. OTP must be verified first.
 
 ---
 
-### GET `/api/categories?searchKey=`
+### GET `/api/categories?searchKey=` *(Public)*
 
 | Query Param | Type | Description |
 |---|---|---|
@@ -161,7 +163,7 @@ Resets password. OTP must be verified first.
 
 ---
 
-### PUT `/api/categories/:id`
+### PUT `/api/categories/:id` *(🔒 Protected)*
 
 **Request Body** *(partial)*:
 ```json
@@ -172,7 +174,7 @@ Resets password. OTP must be verified first.
 
 ---
 
-### DELETE `/api/categories/:id`
+### DELETE `/api/categories/:id` *(🔒 Protected)*
 
 **Success (200):**
 ```json
@@ -351,9 +353,11 @@ Partial update. The same conditional rules apply **when `hasMultipleTypes` is in
 
 ---
 
-## Product APIs *(🔒 Protected)*
+## Product APIs
 
-### POST `/api/products`
+> **Access:** `GET /api/products` and `GET /api/products/:id` are **public** (no auth) — used by the customer showcase. All write operations (`POST` / `PUT` / `DELETE`) are **🔒 protected** and require a valid JWT.
+
+### POST `/api/products` *(🔒 Protected)*
 
 **Request Body:**
 ```json
@@ -416,7 +420,7 @@ Partial update. The same conditional rules apply **when `hasMultipleTypes` is in
 
 ---
 
-### GET `/api/products?searchKey=&page=&limit=`
+### GET `/api/products?searchKey=&page=&limit=` *(Public)*
 
 | Query Param | Type | Default | Description |
 |---|---|---|---|
@@ -440,13 +444,13 @@ Partial update. The same conditional rules apply **when `hasMultipleTypes` is in
 
 ---
 
-### GET `/api/products/:id`
+### GET `/api/products/:id` *(Public)*
 
 **Errors:** `404` Product not found
 
 ---
 
-### PUT `/api/products/:id`
+### PUT `/api/products/:id` *(🔒 Protected)*
 
 **Request Body** *(partial — any subset of create-fields):*
 ```json
@@ -459,7 +463,7 @@ When `materialList` is included in the update, every item must conform to the **
 
 ---
 
-### DELETE `/api/products/:id`
+### DELETE `/api/products/:id` *(🔒 Protected)*
 
 **Errors:** `404` Product not found
 

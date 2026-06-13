@@ -9,12 +9,13 @@ import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-router.use(authMiddleware);
-
-router.post('/', validate(createProductSchema), productController.create);
+// ─── Public (read) ───────────────────────────────────────
 router.get('/', productController.getAll);
 router.get('/:id', productController.getById);
-router.put('/:id', validate(updateProductSchema), productController.update);
-router.delete('/:id', productController.remove);
+
+// ─── Protected (write) ───────────────────────────────────
+router.post('/', authMiddleware, validate(createProductSchema), productController.create);
+router.put('/:id', authMiddleware, validate(updateProductSchema), productController.update);
+router.delete('/:id', authMiddleware, productController.remove);
 
 export default router;
